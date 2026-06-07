@@ -1,86 +1,53 @@
-# Path-length dependence of parton energy loss across collision systems
-
-A Bayesian and simulation-based-inference (SBI) extraction of the effective
-path-length exponent of parton energy loss, ΔE ∝ ρ·Lⁿ, from CMS charged-particle
-nuclear modification factors R_AA across four collision systems
-(O+O, Ne+Ne, Xe+Xe, Pb+Pb), spanning mass number A = 16–208.
-
-**Headline result:** n_eff = 1.85 ± 0.15 (stat) ± 0.05 (syst) for the
-⟨N_part⟩^{1/3} geometry — radiative-dominated (n=2), consistent with a universal
-exponent from O+O to Pb+Pb. Nested-sampling model selection decisively favours
-radiative scaling over collisional (n=1, 2ΔlnZ ≈ −29) and strong-coupling
-(n=3, 2ΔlnZ ≈ −48).
-
-This repository contains the full, reproducible analysis pipeline: forward
-model, correlated-Gaussian likelihood, dual-Glauber geometry, nested-sampling
-model comparison, coverage calibration, a 160-variant sensitivity programme,
-a normalizing-flow neural posterior estimator (validated by simulation-based
-calibration), a calibrated Gaussian-process prediction engine, leave-one-system-
-out stability tests, and a continuous evidence landscape.
-
-## Repository layout
-
-```
-raa-pathlength/
-├── src/         analysis scripts (one module per result; see mapping below)
-├── results/     JSON outputs produced by the scripts
-├── figures/     all paper figures (PNG/SVG)
-├── paper/       manuscript (LaTeX source + compiled PDF + referee response)
-└── data/        pointers to the public HEPData records (see data/README.md)
-```
-
-## Script → result map
-
-| Script | Produces | Paper section |
-|---|---|---|
-| `mc_glauber.py` | `mc_glauber.json` (dual-Glauber geometry) | Methodology |
-| `mc_hires.py` | `mc_glauber_hires.json` (5000-event convergence) | Sensitivity |
-| `sensitivity.py`, `sens_fig.py` | `sensitivity.json`, heatmap | Sensitivity |
-| `universality.py` | `universality.json` | Universality |
-| `qc_sqrts.py`, `qc_geometry.py` | QC checks | Systematics |
-| `jetscape.py` | `jetscape_comparison.json` | JETSCAPE comparison |
-| `loso_predict.py` | `loso_predictions.json` | LOSO + predictions |
-| `gp_predict.py` | `gp_predictions.json` | ML prediction engine |
-| `ml_upgrades.py` | `ml_npe_sbc.json` (NPE, 1.5×10⁴) | ML cross-validation |
-| `ml_npe_50k.py` | `ml_npe_sbc_50k.json` (NPE convergence) | Sensitivity |
-| `evidence_qw_qgp.py` | `evidence_landscape.json`, `qw_variant.json`, `qgp_oo.json` | Model selection, Discussion |
-| `reviewer_p2.py` | `reviewer_p2.json` (fluctuations, √s, widened bands) | Systematics |
-| `nshift.py` | n with high-statistics geometry | Sensitivity |
-| `alice_overlay.py` | `alice_overlay.json` (external check) | Outlook |
-| `make_flowchart.py` | pipeline flowchart | Fig. 1 |
-| `raa_kaggle_pipeline.py` | unified notebook-style pipeline | — |
-
-## Requirements
-
+PLENA — Path-Length R_AA Analysis Code
+Reproducible analysis code and an interactive calculator (PLENA) for studying how
+parton energy loss, ΔE ∝ ρ·Lⁿ, scales with collision-system size, using public
+CMS charged-particle nuclear-modification factors (R_AA). The repository provides
+the full computational pipeline and a browser-based tool; the scientific write-up
+is described in a separate manuscript (in preparation) and is not included here.
+What this repository contains
+`src/` — analysis scripts (geometry, likelihood, model comparison, sensitivity,
+machine-learning cross-validation); one module per computational result.
+`results/` — JSON outputs produced by the scripts.
+`figures/` — generated plots (PNG).
+`data/` — pointers to the public HEPData records used as input (see `data/README.md`).
+`index.html` — PLENA, a standalone interactive R_AA calculator (open in any browser).
+The interactive calculator (PLENA)
+`index.html` is a self-contained tool: choose a collision system, type or drag the
+model parameters (n, κ, β), and compare the computed R_AA(pT) against the public
+CMS data. It reports a live goodness-of-fit, supports auto-fitting, accepts
+user-supplied data (CSV), and exports the computed curve. Open it locally or host
+it with any static-site service.
+Script → output map
+Script	Output
+`mc_glauber.py`	`mc_glauber.json` (Glauber geometry)
+`mc_hires.py`	`mc_glauber_hires.json` (high-statistics geometry)
+`sensitivity.py`, `sens_fig.py`	`sensitivity.json`, heatmap
+`universality.py`	`universality.json`
+`qc_sqrts.py`, `qc_geometry.py`	quality-control checks
+`jetscape.py`	`jetscape_comparison.json`
+`loso_predict.py`	`loso_predictions.json`
+`gp_predict.py`	`gp_predictions.json`
+`ml_upgrades.py`, `ml_npe_50k.py`	`ml_npe_sbc.json`, `ml_npe_sbc_50k.json`
+`evidence_qw_qgp.py`	`evidence_landscape.json`, `qw_variant.json`, `qgp_oo.json`
+`alice_overlay.py`	`alice_overlay.json`
+`make_flowchart.py`	pipeline flowchart
+Requirements
 ```bash
 pip install -r requirements.txt
 ```
-
-Python ≥ 3.10. Key packages: numpy, scipy, emcee, dynesty, scikit-learn,
-torch, zuko, ngboost, pyyaml, matplotlib. See `requirements.txt`.
-
-## Data
-
-The analysis uses public CMS and ALICE records from HEPData. They are **not**
-redistributed here; download instructions and record IDs are in
-[`data/README.md`](data/README.md). After downloading, update the data paths at
-the top of the scripts.
-
-## How to reproduce
-
-1. Install requirements and download the HEPData records (see `data/README.md`).
-2. Run the geometry first: `python src/mc_glauber.py`.
-3. Run the main pipeline / individual modules; each writes a JSON to `results/`
-   and figures to `figures/`.
-4. The manuscript in `paper/` cites these outputs; recompile the LaTeX with
-   any standard TeX distribution (the `article`-class version compiles
-   stand-alone with `pdflatex`).
-
-## Citation
-
-If you use this code or its results, please cite the paper (see
-`CITATION.cff`).
-
-## License
-
+Python ≥ 3.10. Key packages: numpy, scipy, emcee, dynesty, scikit-learn, torch,
+zuko, ngboost, pyyaml, matplotlib.
+Data
+Input R_AA datasets are public CMS and ALICE records on HEPData. They are not
+redistributed here; record IDs and download instructions are in
+`data/README.md`. Update the data paths at the top of the scripts
+after downloading.
+How to reproduce
+Install requirements and download the HEPData records (see `data/README.md`).
+Run the geometry first: `python src/mc_glauber.py`.
+Run the individual modules; each writes a JSON to `results/` and figures to `figures/`.
+Citation
+A citation entry is provided in `CITATION.cff`. When the associated paper is
+published, please cite it (a reference will be added here).
+License
 MIT (see `LICENSE`). The HEPData inputs retain their original licenses.
