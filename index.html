@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Heavy-Ion Path-Length R_AA Calculator</title>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/prop-types@15/prop-types.min.js"></script>
+<script crossorigin src="https://unpkg.com/recharts@2.12.7/umd/Recharts.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+  html,body{margin:0;padding:0;background:#090c0f}
+  #root{min-height:100vh}
+  input[type=range]{-webkit-appearance:none;height:4px;border-radius:4px;background:linear-gradient(90deg,#e8a33d 0%,#e8a33d var(--p),#2b3640 var(--p));outline:none}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:#f3ede3;border:3px solid #e8a33d;cursor:pointer;box-shadow:0 0 8px rgba(232,163,61,.5)}
+  input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:#f3ede3;border:3px solid #e8a33d;cursor:pointer}
+  input[type=range].nlev{background:linear-gradient(90deg,#5ad1d6 0%,#5ad1d6 var(--p),#2b3640 var(--p))}
+  input[type=range].nlev::-webkit-slider-thumb{border-color:#5ad1d6;box-shadow:0 0 8px rgba(90,209,214,.5)}
+  input.num{font-family:'IBM Plex Mono',monospace;width:62px;background:#0e1419;border:1px solid #2b3640;color:#f0c074;
+    border-radius:6px;padding:4px 6px;font-size:12.5px;text-align:right}
+  input.num:focus{outline:none;border-color:#e8a33d}
+  input.num.cy{color:#5ad1d6}
+  input.num.cy:focus{border-color:#5ad1d6}
+  textarea.csv{width:100%;box-sizing:border-box;background:#0e1419;border:1px solid #2b3640;color:#cdd8e1;
+    border-radius:8px;padding:8px;font-family:'IBM Plex Mono',monospace;font-size:11px;resize:vertical}
+  .recharts-cartesian-grid line{stroke:rgba(120,150,170,0.1)}
+  a{color:#5ad1d6}
+  table.dt{width:100%;border-collapse:collapse;font-size:11px}
+  table.dt th{color:#7f95a6;text-align:right;padding:3px 6px;border-bottom:1px solid #2b3640;font-weight:500}
+  table.dt td{text-align:right;padding:3px 6px;color:#cdd8e1;border-bottom:1px solid rgba(120,150,170,0.08)}
+  button.act{font-family:inherit;cursor:pointer;border-radius:8px;padding:7px 9px;font-size:11.5px;
+    border:1px solid rgba(120,150,170,0.3);background:rgba(255,255,255,0.03);color:#cdd8e1}
+  button.act:hover{background:rgba(255,255,255,0.08)}
+  button.prim{border-color:#e8a33d;background:rgba(232,163,61,0.14);color:#f0c074}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useMemo, useCallback } = React;
+const { ComposedChart, Area, Line, Scatter, ErrorBar, XAxis, YAxis, CartesianGrid, ReferenceLine,
+        ResponsiveContainer, Tooltip, ReferenceDot, ReferenceArea } = Recharts;
+
+const DATA = {"Agrid":[12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96,100,104,108,112,116,120,124,128,132,136,140,144,148,152,156,160,164,168,172,176,180,184,188,192,196,200,204,208,212,216,220,224,228,232,236,240],"G_ratio":{"12":0.4174,"16":0.4601,"20":0.4790,"24":0.5130,"28":0.5392,"32":0.5741,"36":0.5844,"40":0.6086,"44":0.6190,"48":0.6220,"52":0.6436,"56":0.6794,"60":0.6880,"64":0.7044,"68":0.7228,"72":0.7073,"76":0.7464,"80":0.7419,"84":0.7642,"88":0.7651,"92":0.7907,"96":0.7949,"100":0.8074,"104":0.8075,"108":0.8469,"112":0.8096,"116":0.8749,"120":0.8453,"124":0.8641,"128":0.8526,"132":0.8619,"136":0.8808,"140":0.8850,"144":0.9285,"148":0.9274,"152":0.9113,"156":0.9023,"160":0.9171,"164":0.9555,"168":0.9416,"172":0.9372,"176":0.9762,"180":0.9636,"184":0.9719,"188":1.0023,"192":0.9774,"196":1.0115,"200":0.9629,"204":1.0126,"208":1.0,"212":1.0186,"216":1.0263,"220":1.0086,"224":1.0124,"228":1.0157,"232":1.0922,"236":1.0422,"240":1.0345},
+  post_median:{kappa:1.0290,n:1.8227,beta:0.3598},
+  post_cov:[[0.025777,0.012333,-0.007972],[0.012333,0.023738,-0.002318],[-0.007972,-0.002318,0.003356]],
+  a_poly:[0.08781,-0.36346,5.54206],
+  known_systems:{"O+O":16,"Ne+Ne":20,"Ar+Ar":40,"Kr+Kr":84,"Xe+Xe":129,"Au+Au":197,"Pb+Pb":208},
+  sys_sqrts:{"O+O":5.36,"Ne+Ne":5.36,"Ar+Ar":5.36,"Kr+Kr":5.36,"Xe+Xe":5.44,"Au+Au":0.2,"Pb+Pb":5.02},
+  fitted:["O+O","Ne+Ne","Xe+Xe","Pb+Pb"], rhic:["Au+Au"],
+  predictions:{"Ar+Ar":[0.55,0.03],"Kr+Kr":[0.41,0.03]},
+  qgp_oo:110, headline_n:1.85, n_stat:0.15, bayes:{n1:-29,n3:-48},
+  cms:{"O+O":[[8.4,0.707,0.041],[10.8,0.743,0.042],[13.2,0.768,0.043],[16.8,0.798,0.044],[21.6,0.832,0.046],[26.4,0.868,0.048],[32.0,0.886,0.049],[41.6,0.904,0.05],[60.8,0.951,0.053],[88.6,0.962,0.059]],
+  "Ne+Ne":[[8.4,0.677,0.045],[10.8,0.714,0.046],[13.2,0.745,0.048],[16.8,0.78,0.05],[21.6,0.833,0.053],[26.4,0.865,0.054],[32.0,0.889,0.056],[41.6,0.913,0.057],[60.8,0.962,0.061],[88.6,0.913,0.067]],
+  "Pb+Pb":[[8.4,0.24,0.024],[10.8,0.28,0.028],[13.2,0.311,0.034],[16.8,0.359,0.039],[21.6,0.41,0.044],[26.4,0.454,0.049],[32.0,0.487,0.053],[41.6,0.559,0.062],[60.8,0.666,0.073],[88.6,0.769,0.085]],
+  "Xe+Xe":[[8.4,0.289,0.038],[10.8,0.338,0.044],[13.2,0.363,0.047],[16.8,0.413,0.054],[21.6,0.472,0.062],[26.4,0.526,0.063],[32.0,0.546,0.067],[41.6,0.624,0.076],[60.8,0.711,0.089],[88.6,0.712,0.112]]},
+  cms_full:{"O+O":[[3.6,0.764,0.051],[4.4,0.723,0.046],[5.2,0.701,0.043],[6.0,0.695,0.041],[6.8,0.698,0.041],[8.4,0.707,0.041],[10.8,0.743,0.042],[13.2,0.768,0.043],[16.8,0.798,0.044],[21.6,0.832,0.046],[26.4,0.868,0.048],[32.0,0.886,0.049],[41.6,0.904,0.05],[60.8,0.951,0.053],[88.6,0.962,0.059]],"Ne+Ne":[[3.6,0.737,0.054],[4.4,0.692,0.049],[5.2,0.666,0.046],[6.0,0.664,0.045],[6.8,0.666,0.045],[8.4,0.677,0.045],[10.8,0.714,0.046],[13.2,0.745,0.048],[16.8,0.78,0.05],[21.6,0.833,0.053],[26.4,0.865,0.054],[32.0,0.889,0.056],[41.6,0.913,0.057],[60.8,0.962,0.061],[88.6,0.913,0.067]],"Pb+Pb":[[3.6,0.381,0.064],[4.4,0.302,0.048],[5.2,0.257,0.035],[6.0,0.236,0.029],[6.8,0.231,0.025],[8.4,0.24,0.024],[10.8,0.28,0.028],[13.2,0.311,0.034],[16.8,0.359,0.039],[21.6,0.41,0.044],[26.4,0.454,0.049],[32.0,0.487,0.053],[41.6,0.559,0.062],[60.8,0.666,0.073],[88.6,0.769,0.085]],"Xe+Xe":[[0.55,0.308,0.037],[0.65,0.332,0.04],[0.75,0.364,0.042],[0.85,0.385,0.045],[0.95,0.422,0.049],[1.05,0.449,0.055],[1.15,0.467,0.057],[1.3,0.48,0.062],[1.5,0.503,0.068],[1.7,0.511,0.073],[1.9,0.519,0.075],[2.1,0.514,0.08],[2.3,0.506,0.079],[2.8,0.472,0.076],[3.6,0.39,0.063],[4.4,0.319,0.05],[5.2,0.289,0.042],[6.0,0.267,0.036],[6.8,0.271,0.036],[8.4,0.289,0.038],[10.8,0.338,0.044],[13.2,0.363,0.047],[16.8,0.413,0.054],[21.6,0.472,0.062],[26.4,0.526,0.063],[32.0,0.546,0.067],[41.6,0.624,0.076],[60.8,0.711,0.089],[88.6,0.712,0.112]]},
+  links:{paper:"#",arxiv:"#",zenodo:"#"}};
+
+const interpG=(A)=>{const g=DATA.G_ratio,xs=DATA.Agrid;if(A<=xs[0])return g[xs[0]];if(A>=xs[xs.length-1])return g[xs[xs.length-1]];
+  let i=0;while(xs[i+1]<A)i++;const x0=xs[i],x1=xs[i+1],t=(A-x0)/(x1-x0);return g[x0]*(1-t)+g[x1]*t;};
+const aOf=(pT,s)=>{const L=Math.log(pT*5.02/s),p=DATA.a_poly;return p[0]*L*L+p[1]*L+p[2];};
+const RAA=(pT,k,n,b,G,fs,s)=>{const d=k*fs*Math.pow(G,n)*Math.pow(pT,b);return Math.pow(pT/(pT+d),aOf(pT,s));};
+const chol=(m)=>{const L=[[0,0,0],[0,0,0],[0,0,0]];for(let i=0;i<3;i++)for(let j=0;j<=i;j++){let s=m[i][j];
+  for(let kk=0;kk<j;kk++)s-=L[i][kk]*L[j][kk];L[i][j]=i===j?Math.sqrt(Math.max(s,1e-12)):s/L[j][j];}return L;};
+const L_CHOL=chol(DATA.post_cov);
+let _g2=null;const randn=()=>{if(_g2!==null){const v=_g2;_g2=null;return v;}const u1=Math.random()||1e-9,u2=Math.random();
+  const r=Math.sqrt(-2*Math.log(u1));_g2=r*Math.sin(2*Math.PI*u2);return r*Math.cos(2*Math.PI*u2);};
+const sampleTheta=()=>{const z=[randn(),randn(),randn()],m=DATA.post_median,mu=[m.kappa,m.n,m.beta],o=[0,0,0];
+  for(let i=0;i<3;i++){let s=mu[i];for(let j=0;j<=i;j++)s+=L_CHOL[i][j]*z[j];o[i]=s;}return o;};
+const pct=(arr,q)=>{const a=[...arr].sort((x,y)=>x-y);const idx=(a.length-1)*q,lo=Math.floor(idx),hi=Math.ceil(idx);
+  return a[lo]+(a[hi]-a[lo])*(idx-lo);};
+const PT=Array.from({length:36},(_,i)=>8*Math.pow(100/8,i/35));
+
+function chi2pts(k,n,b,pts,G,s){
+  if(k<=0||k>5||n<0||n>4.5||b<-0.6||b>1.4) return 1e9;
+  const fs=Math.pow(s/5.02,0.31); let c=0;
+  for(const [pt,y,e] of pts){if(e>0) c+=((y-RAA(pt,k,n,b,G,fs,s))/e)**2;}
+  return c;
+}
+function nelderMead(f,x0,iters){
+  const n=x0.length,a=1,g=2,r=0.5,sg=0.5;
+  let sx=[x0.slice()]; for(let i=0;i<n;i++){const x=x0.slice(); x[i]+=(x[i]!==0?x[i]*0.12:0.12); sx.push(x);}
+  let fv=sx.map(f);
+  for(let it=0;it<iters;it++){
+    const ord=fv.map((v,i)=>i).sort((p,q)=>fv[p]-fv[q]); sx=ord.map(i=>sx[i]); fv=ord.map(i=>fv[i]);
+    const c=new Array(n).fill(0); for(let i=0;i<n;i++)for(let j=0;j<n;j++)c[j]+=sx[i][j]/n;
+    const xr=c.map((cj,j)=>cj+a*(cj-sx[n][j])),fr=f(xr);
+    if(fr<fv[0]){const xe=c.map((cj,j)=>cj+g*(xr[j]-cj)),fe=f(xe); if(fe<fr){sx[n]=xe;fv[n]=fe;}else{sx[n]=xr;fv[n]=fr;}}
+    else if(fr<fv[n-1]){sx[n]=xr;fv[n]=fr;}
+    else{const xc=c.map((cj,j)=>cj+r*(sx[n][j]-cj)),fc=f(xc);
+      if(fc<fv[n]){sx[n]=xc;fv[n]=fc;}
+      else{for(let i=1;i<=n;i++){sx[i]=sx[i].map((xj,j)=>sx[0][j]+sg*(xj-sx[0][j]));fv[i]=f(sx[i]);}}}
+  }
+  const ord=fv.map((v,i)=>i).sort((p,q)=>fv[p]-fv[q]); return {x:sx[ord[0]],f:fv[ord[0]]};
+}
+function parseCSV(txt){
+  const out=[];
+  for(const line of txt.split(/\r?\n/)){
+    const t=line.trim(); if(!t||/^[a-zA-Z#]/.test(t)) continue;
+    const p=t.split(/[, \t;]+/).map(Number).filter(v=>!isNaN(v));
+    if(p.length>=2) out.push([p[0],p[1],p.length>=3?Math.abs(p[2]):0.05]);
+  }
+  return out.filter(r=>r[0]>=8);
+}
+
+function App(){
+  const M=DATA.post_median;
+  const [A,setA]=useState(16);
+  const [s,setS]=useState(5.36);
+  const [k,setK]=useState(M.kappa);
+  const [n,setN]=useState(M.n);
+  const [b,setB]=useState(M.beta);
+  const [showData,setShowData]=useState(false);
+  const [userData,setUserData]=useState(null);
+  const [csvText,setCsvText]=useState("");
+  const [useUser,setUseUser]=useState(false);
+  const [fullRange,setFullRange]=useState(false);
+
+  const sysName=Object.entries(DATA.known_systems).find(([,v])=>v===A)?.[0];
+  const isRHIC=DATA.rhic.includes(sysName);
+  const isFitted=DATA.fitted.includes(sysName);
+  const pred=sysName&&DATA.predictions[sysName];
+  const G=interpG(A),fs=Math.pow(s/5.02,0.31);
+
+  // FIT points (chi2): always pT>=8 canonical set (or user's own); DISPLAY may include full range
+  const usingUser = useUser&&userData&&userData.length;
+  const activePts = usingUser?userData:(isFitted?DATA.cms[sysName]:null);            // for chi2 (pT>=8)
+  const activeLabel = usingUser?"your data":(isFitted?"CMS data":null);
+  const displayPts = usingUser?userData:((fullRange&&isFitted)?DATA.cms_full[sysName]:(isFitted?DATA.cms[sysName]:null));
+
+  const pickSystem=(nm,v)=>{setA(v); if(DATA.sys_sqrts[nm]>1) setS(DATA.sys_sqrts[nm]);};
+  const reset=()=>{setK(M.kappa);setN(M.n);setB(M.beta);};
+  const autofit=useCallback(()=>{
+    if(!activePts) return;
+    const res=nelderMead(x=>chi2pts(x[0],x[1],x[2],activePts,G,s),[k,n,b],260);
+    setK(+res.x[0].toFixed(4)); setN(+res.x[1].toFixed(4)); setB(+res.x[2].toFixed(4));
+  },[activePts,G,s,k,n,b]);
+  const loadCSV=()=>{const d=parseCSV(csvText); if(d.length){setUserData(d);setUseUser(true);} else {setUserData([]);}};
+  const exportCSV=()=>{
+    let csv="pT_GeV,RAA_model\n"+PT.map(pt=>pt.toFixed(2)+","+RAA(pt,k,n,b,G,fs,s).toFixed(4)).join("\n");
+    const blob=new Blob([csv],{type:"text/csv"}); const url=URL.createObjectURL(blob);
+    const a=document.createElement("a"); a.href=url; a.download=(sysName||"A"+A)+"_RAA_model.csv"; a.click(); URL.revokeObjectURL(url);
+  };
+
+  const {band,postCurve}=useMemo(()=>{
+    const NS=300; const th=Array.from({length:NS},sampleTheta);
+    const band=PT.map(pT=>{const v=th.map(([kk,nn,bb])=>RAA(pT,kk,nn,bb,G,fs,s));
+      return {pt:+pT.toFixed(2),range:[+pct(v,0.16).toFixed(4),+pct(v,0.84).toFixed(4)]};});
+    const postCurve=PT.map(pT=>({post:+RAA(pT,M.kappa,M.n,M.beta,G,fs,s).toFixed(4)}));
+    return {band,postCurve};
+  },[A,s]);
+  const userCurve=useMemo(()=>PT.map((pT,i)=>({pt:+pT.toFixed(2),
+    user:+RAA(pT,k,n,b,G,fs,s).toFixed(4),range:band[i].range,post:postCurve[i].post})),[A,s,k,n,b,band,postCurve]);
+
+  const raa10=RAA(10,k,n,b,G,fs,s);
+  const cmpPts=displayPts?displayPts.map(([pt,y,e])=>({pt,y,e})):[];
+  const inclPts=cmpPts.filter(p=>p.pt>=8), exclPts=cmpPts.filter(p=>p.pt<8);
+  const showFull=fullRange&&isFitted&&!usingUser;
+  const c2=activePts?chi2pts(k,n,b,activePts,G,s):null;
+  const dof=activePts?Math.max(1,activePts.length-3):null;
+  const c2dof=c2!=null&&c2<1e8?c2/dof:null;
+  const c2col=c2dof==null?"#8aa0b1":(c2dof<2?"#4caf72":(c2dof<6?"#e8a33d":"#d9776a"));
+
+  const st={
+    page:{minHeight:"100vh",background:"radial-gradient(1200px 600px at 70% -10%, #16202b 0%, #0c1014 55%, #090c0f 100%)",
+      color:"#dfe7ee",fontFamily:"'IBM Plex Mono', ui-monospace, monospace",padding:"clamp(14px,2.4vw,32px)",boxSizing:"border-box"},
+    title:{fontFamily:"'Fraunces', Georgia, serif",fontWeight:600,letterSpacing:"-0.01em",fontSize:"clamp(20px,2.6vw,30px)",lineHeight:1.1,margin:0,color:"#f3ede3"},
+    accent:{color:"#e8a33d"}, cyan:{color:"#5ad1d6"},
+    card:{background:"rgba(20,28,36,0.72)",border:"1px solid rgba(120,150,170,0.16)",borderRadius:13,padding:"15px 17px"},
+    label:{fontSize:10.5,letterSpacing:"0.15em",textTransform:"uppercase",color:"#7f95a6",marginBottom:9},
+    big:{fontFamily:"'Fraunces',serif",fontSize:"clamp(24px,3.2vw,38px)",fontWeight:600,lineHeight:1},
+    chip:(on)=>({padding:"6px 10px",borderRadius:8,fontSize:12,cursor:"pointer",border:"1px solid "+(on?"#e8a33d":"rgba(120,150,170,0.22)"),
+      background:on?"rgba(232,163,61,0.14)":"rgba(255,255,255,0.02)",color:on?"#f0c074":"#aebcc9"}),
+  };
+
+  // param row = slider + numeric input field
+  const Param=({lab,val,set,min,max,step,cls})=>(
+    <div style={{marginBottom:12}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+        <span style={{fontSize:12,color:"#cdd8e1"}} dangerouslySetInnerHTML={{__html:lab}}/>
+        <input className={"num"+(cls==="nlev"?" cy":"")} type="number" min={min} max={max} step={step} value={val}
+          onChange={e=>{const v=parseFloat(e.target.value); if(!isNaN(v)) set(Math.min(max,Math.max(min,v)));}}/>
+      </div>
+      <input className={cls||""} type="range" min={min} max={max} step={step} value={val}
+        onChange={e=>set(+e.target.value)} style={{width:"100%","--p":((val-min)/(max-min)*100)+"%"}}/>
+    </div>);
+
+  return (
+    <div style={st.page}><div style={{maxWidth:1180,margin:"0 auto"}}>
+      <div style={{...st.label,color:"#e8a33d",marginBottom:5}}>Heavy-Ion Phenomenology &middot; Interactive Calculator</div>
+      <h1 style={st.title}>Path-length energy-loss <span style={st.accent}>R<sub>AA</sub></span> calculator</h1>
+      <div style={{fontSize:11.5,color:"#7f95a6",marginTop:4,marginBottom:8}}>
+        Type or drag the model parameters, compare against the real CMS data (or upload your own),
+        and read the live &chi;<sup>2</sup>/dof. Auto-fit finds the best parameters for the active dataset.</div>
+
+      {isRHIC &&
+        <div style={{margin:"12px 0",padding:"11px 15px",borderRadius:10,background:"rgba(178,65,58,0.16)",
+          border:"1px solid #b0413a",color:"#f0b0aa",fontSize:12.5,lineHeight:1.55}}>
+          <b style={{color:"#e88a82"}}>&#9888; Out-of-domain.</b> Au+Au is a RHIC system (&#8730;s<sub>NN</sub> &asymp; 0.2 TeV);
+          this LHC-calibrated model has no physical validity there. Curve shown is illustrative only.</div>}
+
+      <div style={{display:"grid",gridTemplateColumns:"minmax(290px,370px) 1fr",gap:16,marginTop:12,alignItems:"start"}}>
+        <div style={{display:"flex",flexDirection:"column",gap:15}}>
+          <div style={st.card}>
+            <div style={st.label}>Collision system</div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+              {Object.entries(DATA.known_systems).map(([nm,v])=>(
+                <span key={nm} style={{...st.chip(A===v),...(DATA.rhic.includes(nm)?{borderStyle:"dashed"}:{})}}
+                  onClick={()=>pickSystem(nm,v)}>{nm}</span>))}
+            </div>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:14}}>
+              <span style={{fontSize:12,color:"#cdd8e1"}}>Mass number A</span>
+              <input className="num" type="number" min={12} max={240} step={1} value={A}
+                onChange={e=>{const v=parseInt(e.target.value); if(!isNaN(v))setA(Math.min(240,Math.max(12,v)));}}/>
+            </div>
+            <input type="range" min={12} max={240} step={1} value={A}
+              onChange={e=>setA(+e.target.value)} style={{width:"100%","--p":((A-12)/228*100)+"%",marginTop:4}}/>
+            <div style={{...st.label,marginTop:12}}>&#8730;s<sub>NN</sub> [TeV]</div>
+            <div style={{display:"flex",gap:6,alignItems:"center"}}>
+              {[5.02,5.36,5.44].map(v=>(<span key={v} style={st.chip(Math.abs(s-v)<0.01)} onClick={()=>setS(v)}>{v}</span>))}
+              <input className="num" type="number" step={0.01} value={s}
+                onChange={e=>{const v=parseFloat(e.target.value); if(!isNaN(v)&&v>0)setS(v);}} style={{marginLeft:"auto"}}/>
+            </div>
+            <div style={{fontSize:10.5,color:"#5d6e7d",marginTop:11,lineHeight:1.5}}>
+              G(A) = {G.toFixed(3)} (MC-Glauber &#10216;N<sub>part</sub>&#10217;<sup>1/3</sup>);
+              f<sub>s</sub> = {fs.toFixed(3)}.</div>
+          </div>
+
+          <div style={{...st.card,border:"1px solid rgba(232,163,61,0.35)"}}>
+            <div style={{...st.label,color:"#e8a33d"}}>Model parameters (type or drag)</div>
+            <div style={{fontSize:10.5,color:"#5d6e7d",marginBottom:11,lineHeight:1.5}}>
+              &Delta;p<sub>T</sub> = &kappa;&middot;f<sub>s</sub>&middot;G<sup>n</sup>&middot;p<sub>T</sub><sup>&beta;</sup>;
+              &nbsp;R<sub>AA</sub> = (p<sub>T</sub>/(p<sub>T</sub>+&Delta;p<sub>T</sub>))<sup>a(pT)</sup></div>
+            <Param lab="n &nbsp;(path-length exponent)" val={n} set={setN} min={0.5} max={3.5} step={0.01} cls="nlev"/>
+            <Param lab="&kappa; &nbsp;(energy-loss strength)" val={k} set={setK} min={0.2} max={2.8} step={0.01}/>
+            <Param lab="&beta; &nbsp;(pT dependence)" val={b} set={setB} min={0.0} max={0.8} step={0.005}/>
+            <div style={{display:"flex",gap:8,marginTop:4}}>
+              <button className="act" onClick={reset} style={{flex:1}}>Reset to posterior</button>
+              <button className={"act"+(activePts?" prim":"")} onClick={autofit} disabled={!activePts}
+                style={{flex:1,opacity:activePts?1:0.45,cursor:activePts?"pointer":"not-allowed"}}>Auto-fit ({activeLabel||"no data"})</button>
+            </div>
+            <button className="act" onClick={exportCSV} style={{width:"100%",marginTop:8}}>Export model curve (CSV)</button>
+          </div>
+
+          <div style={st.card}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div style={{...st.label,marginBottom:0}}>Your own data (CSV)</div>
+              {userData&&userData.length>0 && <span style={{fontSize:10.5,color:useUser?"#5ad1d6":"#5d6e7d",cursor:"pointer"}}
+                onClick={()=>setUseUser(u=>!u)}>{useUser?"using yours \u2713":"click to use"}</span>}
+            </div>
+            <div style={{fontSize:10,color:"#5d6e7d",margin:"4px 0 6px"}}>Paste rows: pT, R_AA, error (one per line)</div>
+            <textarea className="csv" rows={3} value={csvText} placeholder={"10, 0.45, 0.03\n20, 0.55, 0.04\n40, 0.7, 0.05"}
+              onChange={e=>setCsvText(e.target.value)}/>
+            <div style={{display:"flex",gap:8,marginTop:6}}>
+              <button className="act prim" onClick={loadCSV} style={{flex:1}}>Load data</button>
+              {userData&&<button className="act" onClick={()=>{setUserData(null);setUseUser(false);setCsvText("");}} style={{flex:1}}>Clear</button>}
+            </div>
+            {userData&&userData.length===0 && <div style={{fontSize:10.5,color:"#d9776a",marginTop:6}}>No valid rows found (need pT&ge;8).</div>}
+            {userData&&userData.length>0 && <div style={{fontSize:10.5,color:"#5ad1d6",marginTop:6}}>Loaded {userData.length} points.</div>}
+          </div>
+        </div>
+
+        <div style={{display:"flex",flexDirection:"column",gap:15}}>
+          <div style={st.card}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:6}}>
+              <div style={st.label}>R<sub>AA</sub>(p<sub>T</sub>) &mdash; your curve vs data &amp; posterior</div>
+              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                {isFitted&&!usingUser && <span style={{...st.chip(fullRange),fontSize:10.5,padding:"3px 8px"}} onClick={()=>setFullRange(f=>!f)}>{fullRange?"fit range (pT\u22658)":"show full range"}</span>}
+                <div style={{fontSize:12,color:"#aebcc9"}}>{sysName?(sysName+" (A="+A+")"):("A="+A)} &middot; &#8730;s={s} TeV</div></div></div>
+            <ResponsiveContainer width="100%" height={330}>
+              <ComposedChart data={userCurve} margin={{top:6,right:14,bottom:6,left:-6}}>
+                <CartesianGrid strokeDasharray="2 4"/>
+                <XAxis dataKey="pt" scale="log" type="number" domain={[showFull?3:8,100]} ticks={showFull?[3,5,8,10,20,40,60,100]:[8,10,20,40,60,100]}
+                  tick={{fill:"#8aa0b1",fontSize:11}} label={{value:"pT [GeV]",position:"insideBottom",offset:-2,fill:"#7f95a6",fontSize:12}}/>
+                <YAxis domain={[0,1.05]} tick={{fill:"#8aa0b1",fontSize:11}}
+                  label={{value:"R_AA",angle:-90,position:"insideLeft",offset:18,fill:"#7f95a6",fontSize:12}}/>
+                <Tooltip contentStyle={{background:"#0e1419",border:"1px solid #2b3640",borderRadius:8,fontSize:12,color:"#dfe7ee"}}
+                  labelFormatter={v=>"pT = "+v+" GeV"}
+                  formatter={(val,nm)=>nm==="user"?[val.toFixed(3),"your R_AA"]:(nm==="post"?[val.toFixed(3),"joint posterior"]:null)}/>
+                <ReferenceLine y={1} stroke="#3a4854" strokeDasharray="4 4"/>
+                <Area dataKey="range" stroke="none" fill="#5ad1d6" fillOpacity={0.10} isAnimationActive={false}/>
+                <Line dataKey="post" stroke="#5ad1d6" strokeWidth={1.3} strokeDasharray="5 4" dot={false} isAnimationActive={false}/>
+                <Line dataKey="user" stroke="#e8a33d" strokeWidth={2.6} dot={false} isAnimationActive={false}/>
+                {showFull && <ReferenceArea x1={3} x2={8} fill="#b0413a" fillOpacity={0.08}
+                  label={{value:"excluded from fit (pT<8)",fill:"#c98a84",fontSize:9,position:"insideTopLeft"}}/>}
+                {inclPts.length>0 &&
+                  <Scatter data={inclPts} dataKey="y" fill={usingUser?"#7fd089":"#dfe7ee"} line={false} isAnimationActive={false} shape="circle">
+                    <ErrorBar dataKey="e" width={3} strokeWidth={1} stroke="#aebcc9"/>
+                  </Scatter>}
+                {exclPts.length>0 &&
+                  <Scatter data={exclPts} dataKey="y" fill="#5d6e7d" line={false} isAnimationActive={false} shape="circle">
+                    <ErrorBar dataKey="e" width={3} strokeWidth={1} stroke="#465563"/>
+                  </Scatter>}
+                {pred && !useUser && <ReferenceDot x={10} y={pred[0]} r={4} fill="#5ad1d6" stroke="#0c1014"/>}
+              </ComposedChart>
+            </ResponsiveContainer>
+            <div style={{fontSize:10.5,color:"#5d6e7d",marginTop:2,display:"flex",gap:15,flexWrap:"wrap"}}>
+              <span><span style={{color:"#e8a33d"}}>&#8212;</span> your curve</span>
+              <span><span style={{color:"#5ad1d6"}}>&#9476;</span> joint posterior + 68% band</span>
+              {displayPts && <span><span style={{color:usingUser?"#7fd089":"#dfe7ee"}}>&#9679;</span> {activeLabel} (fitted)</span>}
+              {showFull && exclPts.length>0 && <span><span style={{color:"#5d6e7d"}}>&#9679;</span> excluded (pT&lt;8)</span>}
+            </div>
+          </div>
+
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:14}}>
+            <div style={st.card}>
+              <div style={st.label}>R<sub>AA</sub> at 10 GeV</div>
+              <div style={st.big}><span style={st.accent}>{raa10.toFixed(2)}</span></div>
+              <div style={{fontSize:10.5,color:"#5d6e7d",marginTop:6}}>from your parameters</div></div>
+            <div style={st.card}>
+              <div style={st.label}>&chi;<sup>2</sup>/dof</div>
+              <div style={st.big}><span style={{color:c2col}}>{c2dof!=null?c2dof.toFixed(2):"\u2014"}</span></div>
+              <div style={{fontSize:10.5,color:"#5d6e7d",marginTop:6}}>
+                {c2dof!=null?("vs "+activeLabel+" \u00b7 dof="+dof):"no active dataset"}</div></div>
+            <div style={st.card}>
+              <div style={st.label}>Mechanism (your n)</div>
+              <Spectrum nUser={n}/></div>
+          </div>
+
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+            <div style={st.card}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <div style={{...st.label,marginBottom:0}}>{useUser&&userData&&userData.length?"Your data":(isFitted?"CMS data (training)":"Data")}</div>
+                {activePts && <span style={{fontSize:10.5,color:"#5ad1d6",cursor:"pointer"}} onClick={()=>setShowData(d=>!d)}>{showData?"hide":"show table"}</span>}
+              </div>
+              {activePts && showData &&
+                <div style={{maxHeight:170,overflowY:"auto",marginTop:8}}>
+                  <table className="dt"><thead><tr><th>pT [GeV]</th><th>R_AA</th><th>&plusmn;err</th><th>model</th></tr></thead>
+                  <tbody>{cmpPts.map((p,i)=>{const ex=p.pt<8&&!usingUser; return (<tr key={i} style={{opacity:ex?0.5:1}}>
+                    <td>{p.pt}{ex?" *":""}</td><td>{p.y.toFixed(3)}</td><td>{p.e.toFixed(3)}</td>
+                    <td style={{color:"#e8a33d"}}>{RAA(p.pt,k,n,b,G,fs,s).toFixed(3)}</td></tr>);})}</tbody></table>
+                  {showFull&&exclPts.length>0 && <div style={{fontSize:9.5,color:"#5d6e7d",marginTop:4}}>* excluded from fit (pT&lt;8 GeV); shown for context only.</div>}
+                </div>}
+              {!activePts && <div style={{fontSize:11,color:"#5d6e7d",marginTop:8}}>Select a fitted system (O+O, Ne+Ne, Xe+Xe, Pb+Pb) or upload your own data.</div>}
+              {activePts && !showData && <div style={{fontSize:10.5,color:"#5d6e7d",marginTop:6}}>{cmpPts.length} points &middot; click &ldquo;show table&rdquo;</div>}
+            </div>
+            <div style={st.card}>
+              <div style={st.label}>Model selection &amp; your fit</div>
+              <div style={{display:"flex",justifyContent:"space-between",fontSize:11.5,color:"#aebcc9"}}>
+                <span>2&Delta;ln&#119979;(n=1) <b style={{color:"#d9776a"}}>{DATA.bayes.n1}</b></span>
+                <span>2&Delta;ln&#119979;(n=3) <b style={{color:"#d9776a"}}>{DATA.bayes.n3}</b></span></div>
+              <div style={{fontSize:12.5,lineHeight:1.7,color:"#cdd8e1",marginTop:8}}>
+                your n = <b style={{color:"#5ad1d6"}}>{n.toFixed(3)}</b> &middot;
+                joint n = <b style={{color:"#e8a33d"}}>{M.n.toFixed(3)}</b> &middot;
+                &Delta;n = {(n-M.n>=0?"+":"")}{(n-M.n).toFixed(3)}</div>
+              {(sysName==="O+O"||sysName==="Ne+Ne") && !useUser &&
+                <div style={{marginTop:9,padding:"8px 10px",borderRadius:8,background:"rgba(46,125,50,0.16)",border:"1px solid #2e7d32"}}>
+                  <span style={{fontSize:11.5,color:"#7fd089",fontWeight:600}}>QGP onset &middot; 2&Delta;ln&#119979; = {DATA.qgp_oo}</span></div>}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style={{display:"flex",justifyContent:"center",gap:18,marginTop:18,fontSize:12}}>
+        <a href={DATA.links.paper}>Paper</a><span style={{color:"#3a4854"}}>&middot;</span>
+        <a href={DATA.links.arxiv}>arXiv</a><span style={{color:"#3a4854"}}>&middot;</span>
+        <a href={DATA.links.zenodo}>Zenodo (data + code)</a></div>
+      <div style={{fontSize:10,color:"#4d5d6b",marginTop:9,textAlign:"center",lineHeight:1.6}}>
+        CMS data are the real charged-particle R<sub>AA</sub> used in the analysis (p<sub>T</sub> &ge; 8 GeV).
+        Interactive &chi;<sup>2</sup>/dof uses diagonal errors for responsiveness; the published fit uses the
+        full correlated covariance, so best-fit values may differ slightly. Minimum-bias; geometry from MC-Glauber.
+      </div>
+    </div></div>
+  );
+}
+
+function Spectrum({nUser}){
+  const x=(v)=>((v-0.5)/3)*100;
+  return (
+    <div><div style={{position:"relative",height:26,marginTop:2}}>
+      <div style={{position:"absolute",top:11,left:0,right:0,height:3,borderRadius:3,background:"#3a4854"}}/>
+      <div style={{position:"absolute",top:9,height:7,borderRadius:4,left:x(1.7)+"%",width:(x(2.0)-x(1.7))+"%",background:"#e8a33d",opacity:0.5}}/>
+      {["1","2","3"].map(v=>(
+        <div key={v} style={{position:"absolute",left:x(+v)+"%",transform:"translateX(-50%)",top:0,textAlign:"center"}}>
+          <div style={{width:1,height:16,background:"#5d6e7d",margin:"0 auto"}}/>
+          <div style={{fontSize:9,color:"#7f95a6"}}>{v}</div></div>))}
+      <div style={{position:"absolute",left:x(nUser)+"%",transform:"translateX(-50%)",top:-3,fontSize:11,color:"#5ad1d6"}}>&#9660;</div>
+    </div>
+    <div style={{fontSize:11,color:"#9fb0bd",marginTop:3}}>
+      {nUser<1.4?"collisional-like":(nUser<2.3?"radiative (BDMPS/GLV)":"strong-coupling-like")}</div></div>);
+}
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
